@@ -18,3 +18,4 @@
 - Keep legacy generation and treasure coordinates in the original region; generate frontier terrain in lightweight sectors from a separate browser-safe catalog so larger worlds retain save compatibility and fast startup.
 - Size the Canvas camera from its screen bounds and keep controls as accessible overlays; this fills different screen proportions without stretching pixel-art geometry.
 - Generate frontier enemies near exploration rather than allocating a world-wide population; this preserves original quest enemies and bounds combat workload.
+- World shape, frontier regions, per-biome wall layouts and the road graph live in src/game/landmass.ts and are seeded deterministically, so saved coordinates stay stable across loads.
