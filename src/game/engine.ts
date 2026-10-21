@@ -6,6 +6,7 @@ import {
   type Biome, type BossDef, type EnemyKind, type NpcDef, type QuestDef, type Recipe, type Slot, type SpiritId, type Stats,
 } from "./data";
 import { generateWorld, W, H, TS, T, tileAt, biomeOf, solidAt, BIOME_LIST, hash, type World } from "./world";
+import { BIOME_LEVEL, enemyLevel, levelScale, xpModifier } from "./levels";
 import { buildTiles, drawChar, drawEnemy, drawStatue, drawNode } from "./gfx";
 import { BUILDINGS, TREASURES, ROOM, doorOf, createInterior, prepareExploration, canClaimTreasure, type Building } from './exploration';
 import { drawBuildings, drawGroundDetails, drawInterior, drawTreasure } from './scenery';
@@ -191,12 +192,12 @@ export class Game {
   }
   mapDataUrl() { return this.minimap.toDataURL(); }
 
-  makeEnemy(kind: EnemyKind, x: number, y: number, tier: number): Enemy {
+  makeEnemy(kind: EnemyKind, x: number, y: number, level: number): Enemy {
     const d = ENEMIES[kind];
-    const m = 1 + (tier - 1) * 0.3;
+    const m = levelScale(level);
     return {
-      id: this.nextId++, kind, x, y, hx: x, hy: y, hp: Math.round(d.hp * m), maxhp: Math.round(d.hp * m), atk: Math.round(d.atk * m), def: d.def,
-      speed: d.speed, xp: Math.round(d.xp * m), gold: Math.round(d.gold * m), level: tier * 4 + Math.floor(Math.random() * 3), cd: 1,
+      id: this.nextId++, kind, x, y, hx: x, hy: y, hp: Math.round(d.hp * m.hp), maxhp: Math.round(d.hp * m.hp), atk: Math.round(d.atk * m.atk), def: d.def + m.def,
+      speed: d.speed, xp: Math.round(d.xp * m.reward), gold: Math.round(d.gold * m.reward), level, cd: 1,
       hurt: 0, dir: 0, alive: true, respawn: 0, slow: 0, kbx: 0, kby: 0, wanderT: 0, wx: x, wy: y, t: Math.random() * 10,
     };
   }
@@ -212,12 +213,12 @@ export class Game {
       const b = BIOME_LIST[this.world.biomes[ty * W + tx]];
       const list = BIOME_ENEMIES[b];
       const kind = list[Math.floor(Math.random() * list.length)];
-      this.enemies.push(this.makeEnemy(kind, tx * TS + 8, ty * TS + 8, TIER[b]));
+      this.enemies.push(this.makeEnemy(kind, tx * TS + 8, ty * TS + 8, enemyLevel(b, kind)));
     }
     for (const b of BOSSES) {
       const look = BOSS_LOOK[b.id];
       const e = this.makeEnemy(look.kind, b.tx * TS + 8, b.ty * TS + 8, 1);
-      e.hp = e.maxhp = b.hp; e.atk = b.atk; e.def = TIER[b.biome] * 3; e.xp = b.xp; e.gold = b.gold; e.speed = 30; e.level = TIER[b.biome] * 5 + 3;
+      e.hp = e.maxhp = b.hp; e.atk = b.atk; e.def = TIER[b.biome] * 3; e.xp = b.xp; e.gold = b.gold; e.speed = 30; e.level = BIOME_LEVEL[b.biome] + 6;
       e.boss = { def: b, active: false, phase: 1, patT: 2, charge: 0, cvx: 0, cvy: 0 };
       this.enemies.push(e);
     }
@@ -233,7 +234,7 @@ export class Game {
       if(tx<3||ty<3||tx>=W-3||ty>=H-3||Math.hypot(tx*TS-this.p.x,ty*TS-this.p.y)<100||solidAt(this.world,tx*TS+8,ty*TS+8))continue;
       if(this.enemies.some(e=>Math.hypot(e.hx-tx*TS-8,e.hy-ty*TS-8)<30))continue;
       const b=biomeOf(this.world,tx*TS,ty*TS),pool=BIOME_ENEMIES[b];
-      this.enemies.push(this.makeEnemy(pool[i%pool.length],tx*TS+8,ty*TS+8,TIER[b]));
+      {const k=pool[i%pool.length];this.enemies.push(this.makeEnemy(k,tx*TS+8,ty*TS+8,enemyLevel(b,k)));}
     }
   }
   travelFrontier(id:string) {
@@ -309,9 +310,10 @@ export class Game {
     this.burst(e.x, e.y - 8, "#ffffff", 16, 80);
     this.audio.sfx("die");
     if (e.summoned) return;
-    this.gainXp(e.xp);
+    const earned = Math.max(1, Math.round(e.xp * xpModifier(this.p.level, e.level)));
+    this.gainXp(earned);
     this.p.gold += e.gold;
-    this.float(e.x, e.y - 30, `+${e.xp} XP`, "#80ffff");
+    this.float(e.x, e.y - 30, `+${earned} XP`, "#80ffff");
     if (e.boss) {
       const b = e.boss.def;
       this.bossesDone.add(b.id);
@@ -901,7 +903,7 @@ export class Game {
       }
     } else if (pat === "summon") {
       for (let i = 0; i < 3; i++) {
-        const m = this.makeEnemy(bs.def.minion, e.x + (Math.random() - 0.5) * 60, e.y + (Math.random() - 0.5) * 60, TIER[bs.def.biome]);
+        const m = this.makeEnemy(bs.def.minion, e.x + (Math.random() - 0.5) * 60, e.y + (Math.random() - 0.5) * 60, enemyLevel(bs.def.biome, bs.def.minion));
         m.summoned = true; m.hx = e.hx; m.hy = e.hy;
         if (!solidAt(this.world, m.x, m.y)) { this.enemies.push(m); this.burst(m.x, m.y - 6, c, 12, 60); }
       }
@@ -1076,6 +1078,7 @@ export class Game {
           drawEnemy(c, e.kind, e.x, e.y, e.t, e.dir, e.hurt > 0);
           if (e.slow > 0) { c.fillStyle = "rgba(150,220,255,0.35)"; c.fillRect(e.x - 7, e.y - 16, 14, 16); }
           if (e.hp < e.maxhp) { c.fillStyle = "#200"; c.fillRect(e.x - 8, e.y - 24, 16, 2); c.fillStyle = "#f44"; c.fillRect(e.x - 8, e.y - 24, 16 * (e.hp / e.maxhp), 2); }
+          { const gap = e.level - this.p.level; c.font = "bold 6px monospace"; c.textAlign = "center"; c.fillStyle = "#000a"; c.fillText(`Nv${e.level}`, e.x + 0.5, e.y - 26.5); c.fillStyle = gap >= 5 ? "#ff5a5a" : gap >= 2 ? "#ffb347" : gap >= -2 ? "#f2f2d0" : "#9ab0a0"; c.fillText(`Nv${e.level}`, e.x, e.y - 27); }
           if (this.targetEnemy === e) { c.strokeStyle = "#ffd040"; c.beginPath(); c.ellipse(e.x, e.y, 9, 4, 0, 0, Math.PI * 2); c.stroke(); }
         }
       } });
