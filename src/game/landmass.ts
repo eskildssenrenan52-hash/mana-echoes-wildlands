@@ -69,19 +69,19 @@ export function createShape(W: number, H: number): Shape {
   for (let x = 0; x < W; x++) {
     const k = blend(x, LEGACY_W + 30, LEGACY_W + 180);
     thrT[x] = (3 + top[x] * 6) * (1 - k) + (6 + top[x] * top[x] * 110) * k;
-    thrB[x] = 8 + bottom[x] * bottom[x] * 340;
+    thrB[x] = 20 + bottom[x] ** 1.5 * 620;
   }
   for (let y = 0; y < H; y++) {
     const k = blend(y, LEGACY_H + 30, LEGACY_H + 180);
-    thrL[y] = (3 + left[y] * 6) * (1 - k) + (8 + left[y] * left[y] * 260) * k;
-    thrR[y] = 6 + right[y] * right[y] * 130;
+    thrL[y] = (3 + left[y] * 6) * (1 - k) + (10 + left[y] ** 1.5 * 520) * k;
+    thrR[y] = 10 + right[y] ** 1.5 * 340;
   }
   const legacy = (x: number, y: number) => x < LEGACY_W - 18 + lw[Math.min(H - 1, y | 0)] * 44 && y < LEGACY_H - 18 + lh[Math.min(W - 1, x | 0)] * 44;
   return {
     legacy,
     land(x, y) {
       if (x < thrL[y] || y < thrT[x] || W - x < thrR[y] || H - y < thrB[x]) return false;
-      if (!legacy(x, y) && lakes.at(x, y) > 0.745) return false;
+      if (!legacy(x, y) && lakes.at(x, y) > 0.73) return false;
       return true;
     },
   };
