@@ -241,7 +241,7 @@ export class Game {
     const gate=FRONTIER_GATES.find(g=>g.id===id);if(!gate)return;
     if(this.interior)this.leaveInterior();
     this.p.x=gate.tx*TS+8;this.p.y=(gate.ty+2)*TS+8;this.clearTransition();
-    this.biome=gate.biome;this.audio.biome=gate.biome;this.biomeBanner={name:gate.name,t:3};
+    this.biome=gate.biome;this.audio.biome=gate.biome;this.biomeBanner={name:`${gate.name} · Nv ${BIOME_LEVEL[gate.biome]}+`,t:3};
     this.populateFrontier();this.save();
   }
 
@@ -739,7 +739,7 @@ export class Game {
 
     // biome
     const b = biomeOf(w, p.x, p.y);
-    if (b !== this.biome) { this.biome = b; this.biomeBanner = { name: BIOME_NAMES[b], t: 3 }; this.audio.biome = b; }
+    if (b !== this.biome) { this.biome = b; this.biomeBanner = { name: `${BIOME_NAMES[b]} · Nv ${BIOME_LEVEL[b]}+`, t: 3 }; this.audio.biome = b; }
     if (this.biomeBanner.t > 0) this.biomeBanner.t -= dt;
 
     this.populateFrontier();
