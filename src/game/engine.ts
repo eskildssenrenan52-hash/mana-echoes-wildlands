@@ -1,11 +1,13 @@
 import { WorldArt } from './world-art';
 import { FRONTIER, FRONTIER_GATES, LEGACY_W, LEGACY_H, type FrontierBiome } from './frontier';
-import { freshSettlement, growPlots, useWorldTool, interactSettlement, renderSettlement, applyStructures, CARPENTRY_RECIPES, type Tool, type CropKind, type StructureKind } from "./settlement";
+import { createHomeInterior, drawHome, drawFurniture, FURNITURE, freshHome, type FurnitureKind } from "./home";
+import { isPlayerHome, freshSettlement, growPlots, useWorldTool, interactSettlement, renderSettlement, applyStructures, CARPENTRY_RECIPES, type Tool, type CropKind, type StructureKind } from "./settlement";
 import {
   BIOME_ENEMIES, BIOME_NAMES, BOSSES, ENEMIES, ITEMS, NPCS, QUESTS, RECIPES, SPIRITS, STATUES,
   type Biome, type BossDef, type EnemyKind, type NpcDef, type QuestDef, type Recipe, type Slot, type SpiritId, type Stats,
 } from "./data";
 import { generateWorld, W, H, TS, T, tileAt, biomeOf, solidAt, BIOME_LIST, hash, type World } from "./world";
+import { BIOME_LEVEL, enemyLevel, levelScale, xpModifier } from "./levels";
 import { buildTiles, drawChar, drawEnemy, drawStatue, drawNode } from "./gfx";
 import { BUILDINGS, TREASURES, ROOM, doorOf, createInterior, prepareExploration, canClaimTreasure, type Building } from './exploration';
 import { drawBuildings, drawGroundDetails, drawInterior, drawTreasure } from './scenery';
@@ -51,6 +53,7 @@ export class Game {
   tool: Tool = 'explore';
   crop: CropKind = 'carrot';
   structure: StructureKind = 'home';
+  furniture: FurnitureKind = 'bed';
   cursor = {x:0,y:0};
   actionCooldown = 0;
   lastDelta = 1/60;
@@ -191,12 +194,12 @@ export class Game {
   }
   mapDataUrl() { return this.minimap.toDataURL(); }
 
-  makeEnemy(kind: EnemyKind, x: number, y: number, tier: number): Enemy {
+  makeEnemy(kind: EnemyKind, x: number, y: number, level: number): Enemy {
     const d = ENEMIES[kind];
-    const m = 1 + (tier - 1) * 0.3;
+    const m = levelScale(level);
     return {
-      id: this.nextId++, kind, x, y, hx: x, hy: y, hp: Math.round(d.hp * m), maxhp: Math.round(d.hp * m), atk: Math.round(d.atk * m), def: d.def,
-      speed: d.speed, xp: Math.round(d.xp * m), gold: Math.round(d.gold * m), level: tier * 4 + Math.floor(Math.random() * 3), cd: 1,
+      id: this.nextId++, kind, x, y, hx: x, hy: y, hp: Math.round(d.hp * m.hp), maxhp: Math.round(d.hp * m.hp), atk: Math.round(d.atk * m.atk), def: d.def + m.def,
+      speed: d.speed, xp: Math.round(d.xp * m.reward), gold: Math.round(d.gold * m.reward), level, cd: 1,
       hurt: 0, dir: 0, alive: true, respawn: 0, slow: 0, kbx: 0, kby: 0, wanderT: 0, wx: x, wy: y, t: Math.random() * 10,
     };
   }
@@ -212,12 +215,12 @@ export class Game {
       const b = BIOME_LIST[this.world.biomes[ty * W + tx]];
       const list = BIOME_ENEMIES[b];
       const kind = list[Math.floor(Math.random() * list.length)];
-      this.enemies.push(this.makeEnemy(kind, tx * TS + 8, ty * TS + 8, TIER[b]));
+      this.enemies.push(this.makeEnemy(kind, tx * TS + 8, ty * TS + 8, enemyLevel(b, kind)));
     }
     for (const b of BOSSES) {
       const look = BOSS_LOOK[b.id];
       const e = this.makeEnemy(look.kind, b.tx * TS + 8, b.ty * TS + 8, 1);
-      e.hp = e.maxhp = b.hp; e.atk = b.atk; e.def = TIER[b.biome] * 3; e.xp = b.xp; e.gold = b.gold; e.speed = 30; e.level = TIER[b.biome] * 5 + 3;
+      e.hp = e.maxhp = b.hp; e.atk = b.atk; e.def = TIER[b.biome] * 3; e.xp = b.xp; e.gold = b.gold; e.speed = 30; e.level = BIOME_LEVEL[b.biome] + 6;
       e.boss = { def: b, active: false, phase: 1, patT: 2, charge: 0, cvx: 0, cvy: 0 };
       this.enemies.push(e);
     }
@@ -233,14 +236,14 @@ export class Game {
       if(tx<3||ty<3||tx>=W-3||ty>=H-3||Math.hypot(tx*TS-this.p.x,ty*TS-this.p.y)<100||solidAt(this.world,tx*TS+8,ty*TS+8))continue;
       if(this.enemies.some(e=>Math.hypot(e.hx-tx*TS-8,e.hy-ty*TS-8)<30))continue;
       const b=biomeOf(this.world,tx*TS,ty*TS),pool=BIOME_ENEMIES[b];
-      this.enemies.push(this.makeEnemy(pool[i%pool.length],tx*TS+8,ty*TS+8,TIER[b]));
+      {const k=pool[i%pool.length];this.enemies.push(this.makeEnemy(k,tx*TS+8,ty*TS+8,enemyLevel(b,k)));}
     }
   }
   travelFrontier(id:string) {
     const gate=FRONTIER_GATES.find(g=>g.id===id);if(!gate)return;
     if(this.interior)this.leaveInterior();
     this.p.x=gate.tx*TS+8;this.p.y=(gate.ty+2)*TS+8;this.clearTransition();
-    this.biome=gate.biome;this.audio.biome=gate.biome;this.biomeBanner={name:gate.name,t:3};
+    this.biome=gate.biome;this.audio.biome=gate.biome;this.biomeBanner={name:`${gate.name} · Nv ${BIOME_LEVEL[gate.biome]}+`,t:3};
     this.populateFrontier();this.save();
   }
 
@@ -309,9 +312,10 @@ export class Game {
     this.burst(e.x, e.y - 8, "#ffffff", 16, 80);
     this.audio.sfx("die");
     if (e.summoned) return;
-    this.gainXp(e.xp);
+    const earned = Math.max(1, Math.round(e.xp * xpModifier(this.p.level, e.level)));
+    this.gainXp(earned);
     this.p.gold += e.gold;
-    this.float(e.x, e.y - 30, `+${e.xp} XP`, "#80ffff");
+    this.float(e.x, e.y - 30, `+${earned} XP`, "#80ffff");
     if (e.boss) {
       const b = e.boss.def;
       this.bossesDone.add(b.id);
@@ -639,7 +643,7 @@ export class Game {
   enterInterior(b: Building) {
     if (this.interior || this.doorCooldown > 0) return;
     this.returnPosition = { x: this.p.x, y: (doorOf(b).ty + 1.7) * TS };
-    this.interior = b; this.world = createInterior(b);
+    this.interior = b; this.world = isPlayerHome(b) ? createHomeInterior(this.settlement.home) : createInterior(b);
     this.p.x = ROOM.spawnX; this.p.y = ROOM.spawnY;
     this.clearTransition(); this.discoveries.add(b.id);
     this.biomeBanner = { name: b.name, t: 3 };
@@ -668,6 +672,11 @@ export class Game {
     const p = this.p, near = (x:number,y:number,r=28) => Math.hypot(p.x-x*TS-8,p.y-y*TS-8)<r;
     if (this.interior) {
       if(near(ROOM.exitX,ROOM.exitY,32)){ this.leaveInterior(); return true; }
+      if(isPlayerHome(this.interior)){
+        const bed=this.settlement.home.furniture.find(f=>f.kind==='bed'&&Math.hypot(p.x-(f.x+1)*TS,p.y-(f.y+1.5)*TS)<40);
+        if(bed){p.hp=this.maxHp();p.mp=this.maxMp();this.audio.sfx('heal');this.toast('Você dormiu em casa. HP e MP restaurados.');return true;}
+        return false;
+      }
       if(near(110,106,30)){this.claimChest(`house-${this.interior.id}`,75,this.interior.secret?'elixir':'ether',2,'Tesouro de '+this.interior.name);return true;}
       if(near(114,100,42)){ this.toast(this.interior.note); return true; }
       if(near(127,105,35) && this.interior.kind === 'inn') {p.hp=this.maxHp();p.mp=this.maxMp();this.audio.sfx('heal');this.toast('Você descansou. HP e MP restaurados.');return true;}
@@ -737,7 +746,7 @@ export class Game {
 
     // biome
     const b = biomeOf(w, p.x, p.y);
-    if (b !== this.biome) { this.biome = b; this.biomeBanner = { name: BIOME_NAMES[b], t: 3 }; this.audio.biome = b; }
+    if (b !== this.biome) { this.biome = b; this.biomeBanner = { name: `${BIOME_NAMES[b]} · Nv ${BIOME_LEVEL[b]}+`, t: 3 }; this.audio.biome = b; }
     if (this.biomeBanner.t > 0) this.biomeBanner.t -= dt;
 
     this.populateFrontier();
@@ -901,7 +910,7 @@ export class Game {
       }
     } else if (pat === "summon") {
       for (let i = 0; i < 3; i++) {
-        const m = this.makeEnemy(bs.def.minion, e.x + (Math.random() - 0.5) * 60, e.y + (Math.random() - 0.5) * 60, TIER[bs.def.biome]);
+        const m = this.makeEnemy(bs.def.minion, e.x + (Math.random() - 0.5) * 60, e.y + (Math.random() - 0.5) * 60, enemyLevel(bs.def.biome, bs.def.minion));
         m.summoned = true; m.hx = e.hx; m.hy = e.hy;
         if (!solidAt(this.world, m.x, m.y)) { this.enemies.push(m); this.burst(m.x, m.y - 6, c, 12, 60); }
       }
@@ -1006,7 +1015,11 @@ export class Game {
       c.drawImage(this.tiles[ground][v], tx * TS, ty * TS);
     }
     drawGroundDetails(c,this.world,x0,y0,x1,y1,wt);
-    if(this.interior) {
+    if(isPlayerHome(this.interior)) {
+      drawHome(c,this.settlement.home,wt);
+      if(this.tool==='furnish'){const d=FURNITURE[this.furniture];c.globalAlpha=.55;drawFurniture(c,{kind:this.furniture,x:this.cursor.x,y:this.cursor.y},wt);c.globalAlpha=1;c.strokeStyle='#f6d18b';c.strokeRect(this.cursor.x*TS+.5,this.cursor.y*TS+.5,d.w*TS-1,d.h*TS-1);}
+      if(this.tool==='unfurnish'){c.strokeStyle='#ed9691';c.strokeRect(this.cursor.x*TS+.5,this.cursor.y*TS+.5,TS-1,TS-1);}
+    } else if(this.interior) {
       drawInterior(c,this.interior,wt);
       drawTreasure(c,110*TS+8,106*TS+12,this.openedChests.has(`house-${this.interior.id}`),wt);
     } else {
@@ -1076,6 +1089,7 @@ export class Game {
           drawEnemy(c, e.kind, e.x, e.y, e.t, e.dir, e.hurt > 0);
           if (e.slow > 0) { c.fillStyle = "rgba(150,220,255,0.35)"; c.fillRect(e.x - 7, e.y - 16, 14, 16); }
           if (e.hp < e.maxhp) { c.fillStyle = "#200"; c.fillRect(e.x - 8, e.y - 24, 16, 2); c.fillStyle = "#f44"; c.fillRect(e.x - 8, e.y - 24, 16 * (e.hp / e.maxhp), 2); }
+          { const gap = e.level - this.p.level; c.font = "bold 6px monospace"; c.textAlign = "center"; c.fillStyle = "#000a"; c.fillText(`Nv${e.level}`, e.x + 0.5, e.y - 26.5); c.fillStyle = gap >= 5 ? "#ff5a5a" : gap >= 2 ? "#ffb347" : gap >= -2 ? "#f2f2d0" : "#9ab0a0"; c.fillText(`Nv${e.level}`, e.x, e.y - 27); }
           if (this.targetEnemy === e) { c.strokeStyle = "#ffd040"; c.beginPath(); c.ellipse(e.x, e.y, 9, 4, 0, 0, Math.PI * 2); c.stroke(); }
         }
       } });
@@ -1243,7 +1257,7 @@ export class Game {
       const raw = localStorage.getItem("mana-quest-save"); if (!raw) return;
       const d = JSON.parse(raw);
       Object.assign(this.p, d.p);
-      this.settlement = d.settlement ?? freshSettlement(); this.terrainEdits = d.terrainEdits ?? {};
+      this.settlement = { ...freshSettlement(), ...(d.settlement ?? {}) }; this.settlement.home ??= freshHome(); this.terrainEdits = d.terrainEdits ?? {};
       for (const [key,value] of Object.entries(this.terrainEdits)) {const [x,y]=key.split(',').map(Number); if(x>=0&&y>=0&&x<W&&y<H)this.overworld.tiles[y*W+x]=value;}
       applyStructures(this); this.buildMinimap();
       this.discoveries = new Set(d.discoveries ?? []); this.openedChests = new Set(d.openedChests ?? []);

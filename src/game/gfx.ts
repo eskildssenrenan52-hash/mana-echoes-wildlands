@@ -253,9 +253,39 @@ export function drawNode(c: Ctx, item: string, x: number, y: number, t: number) 
     }
     case "desert_rose": px(c, x - 1, y - 6, 2, 6, "#3a8a3a"); px(c, x - 3, y - 10, 6, 4, "#ff6090"); px(c, x - 1, y - 9, 2, 2, "#ffd0e0"); break;
     case "wood": px(c, x - 7, y - 5, 14, 5, "#8a5a2a"); px(c, x - 7, y - 5, 3, 5, "#c09060"); px(c, x - 6, y - 4, 1, 3, "#8a5a2a"); break;
-    case "stone": case "copper_ore": case "coal": case "iron_ore": px(c, x - 6, y - 8, 12, 8, "#707080"); px(c, x - 3, y - 6, 2, 2, "#d0d0e0"); px(c, x + 2, y - 4, 2, 2, "#c08050"); break;
-    case "crystal_ore": px(c, x - 4, y - 12, 4, 12, "#a060ff"); px(c, x, y - 9, 4, 9, "#d090ff"); px(c, x - 2, y - 10, 1, 6, "#ffffff"); break;
-    case "mana_shard": px(c, x - 2, y - 10 + Math.round(Math.sin(t * 3)), 4, 7, "#60f0ff"); px(c, x - 1, y - 9 + Math.round(Math.sin(t * 3)), 1, 3, "#ffffff"); break;
+    case "stone": case "copper_ore": case "coal": case "iron_ore": {
+      // Shaded boulder with faceted highlights and glinting mineral veins.
+      const V: Record<string, [string, string, string]> = { stone: ["#9a9aa6", "#c9c9d2", "#7b7b88"], copper_ore: ["#e08a4a", "#ffc28a", "#a8562c"], coal: ["#2a2630", "#5a5466", "#141218"], iron_ore: ["#c7ccd8", "#ffffff", "#8a90a0"] };
+      const [vein, glint, deep] = V[item];
+      px(c, x - 9, y - 1, 18, 3, "#00000033");
+      px(c, x - 7, y - 9, 14, 9, "#5e6170"); px(c, x - 8, y - 6, 16, 6, "#5e6170"); px(c, x - 5, y - 11, 9, 3, "#6f7383");
+      px(c, x - 6, y - 10, 6, 4, "#8a8ea0"); px(c, x - 7, y - 6, 4, 3, "#7a7e90"); px(c, x + 3, y - 4, 5, 4, "#4a4c5a"); px(c, x - 8, y - 1, 16, 1, "#3d3f4b");
+      px(c, x - 4, y - 7, 3, 2, deep); px(c, x - 3, y - 8, 2, 1, vein); px(c, x + 1, y - 9, 3, 2, vein); px(c, x + 2, y - 10, 1, 1, glint);
+      px(c, x + 2, y - 4, 3, 2, vein); px(c, x + 3, y - 5, 1, 1, glint); px(c, x - 6, y - 4, 2, 2, vein);
+      if (item === "coal") { px(c, x - 1, y - 6, 2, 1, "#7a6c84"); }
+      if (Math.sin(t * 2.5 + x * 0.7) > 0.6) { px(c, x + 2, y - 11, 1, 3, glint); px(c, x + 1, y - 10, 3, 1, glint); }
+      break;
+    }
+    case "crystal_ore": {
+      const pulse = 0.25 + (Math.sin(t * 2 + x) + 1) * 0.12;
+      c.globalAlpha = pulse; px(c, x - 9, y - 16, 18, 16, "#b98cff"); c.globalAlpha = 1;
+      px(c, x - 8, y - 2, 16, 3, "#4f4a66");
+      px(c, x - 6, y - 10, 4, 9, "#7d4fd8"); px(c, x - 5, y - 12, 2, 2, "#9d6ff0");
+      px(c, x - 2, y - 15, 5, 14, "#a979ff"); px(c, x - 1, y - 17, 3, 2, "#c9a6ff"); px(c, x + 1, y - 14, 2, 12, "#7d4fd8");
+      px(c, x + 3, y - 9, 4, 8, "#c597ff"); px(c, x + 4, y - 11, 2, 2, "#e4cfff");
+      px(c, x - 1, y - 13, 1, 8, "#ffffff"); px(c, x + 4, y - 8, 1, 4, "#ffffff");
+      if (sh) { px(c, x - 4, y - 18, 1, 3, "#ffffff"); px(c, x - 5, y - 17, 3, 1, "#ffffff"); }
+      break;
+    }
+    case "mana_shard": {
+      const b = Math.round(Math.sin(t * 3) * 1.5);
+      c.globalAlpha = 0.3 + Math.sin(t * 4) * 0.1; px(c, x - 6, y - 15 + b, 12, 13, "#60f0ff"); c.globalAlpha = 1;
+      px(c, x - 4, y - 1, 8, 2, "#00000030");
+      px(c, x - 1, y - 14 + b, 2, 2, "#c8fbff"); px(c, x - 3, y - 12 + b, 6, 6, "#4fd6f0"); px(c, x - 2, y - 6 + b, 4, 2, "#2fa8d0"); px(c, x - 1, y - 4 + b, 2, 1, "#2fa8d0");
+      px(c, x - 2, y - 11 + b, 1, 4, "#ffffff"); px(c, x + 1, y - 10 + b, 1, 2, "#a6f6ff");
+      const o = t * 2; px(c, x + Math.round(Math.cos(o) * 7), y - 9 + Math.round(Math.sin(o) * 3), 1, 1, "#ffffff"); px(c, x + Math.round(Math.cos(o + 3) * 7), y - 9 + Math.round(Math.sin(o + 3) * 3), 1, 1, "#b8f8ff");
+      break;
+    }
   }
   if (sh) px(c, x + 3, y - 10, 1, 1, "#ffffff");
 }
