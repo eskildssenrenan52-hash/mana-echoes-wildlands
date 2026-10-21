@@ -58,8 +58,7 @@ export function canPlace(home: HomeState, piece: Furniture): boolean {
     if (x <= r.left || x >= r.left + r.width - 1 || y < r.top + 2 || y >= ROOM.exitY) return false;
     if (Math.abs(x - ROOM.exitX) <= 0 && y >= ROOM.exitY - 2) return false;
   }
-  return !home.furniture.some(f => FURNITURE[f.kind].solid === d.solid && overlaps(f, piece)) &&
-    !(d.solid ? false : false);
+  return !home.furniture.some(f => FURNITURE[f.kind].solid === d.solid && overlaps(f, piece));
 }
 export function pieceAt(home: HomeState, x: number, y: number) {
   // Prefer solid pieces (drawn on top of rugs).

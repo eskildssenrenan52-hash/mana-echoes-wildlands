@@ -1,6 +1,7 @@
 import { WorldArt } from './world-art';
 import { FRONTIER, FRONTIER_GATES, LEGACY_W, LEGACY_H, type FrontierBiome } from './frontier';
-import { freshSettlement, growPlots, useWorldTool, interactSettlement, renderSettlement, applyStructures, CARPENTRY_RECIPES, type Tool, type CropKind, type StructureKind } from "./settlement";
+import { createHomeInterior, drawHome, drawFurniture, FURNITURE, freshHome, type FurnitureKind } from "./home";
+import { isPlayerHome, freshSettlement, growPlots, useWorldTool, interactSettlement, renderSettlement, applyStructures, CARPENTRY_RECIPES, type Tool, type CropKind, type StructureKind } from "./settlement";
 import {
   BIOME_ENEMIES, BIOME_NAMES, BOSSES, ENEMIES, ITEMS, NPCS, QUESTS, RECIPES, SPIRITS, STATUES,
   type Biome, type BossDef, type EnemyKind, type NpcDef, type QuestDef, type Recipe, type Slot, type SpiritId, type Stats,
@@ -52,6 +53,7 @@ export class Game {
   tool: Tool = 'explore';
   crop: CropKind = 'carrot';
   structure: StructureKind = 'home';
+  furniture: FurnitureKind = 'bed';
   cursor = {x:0,y:0};
   actionCooldown = 0;
   lastDelta = 1/60;
@@ -641,7 +643,7 @@ export class Game {
   enterInterior(b: Building) {
     if (this.interior || this.doorCooldown > 0) return;
     this.returnPosition = { x: this.p.x, y: (doorOf(b).ty + 1.7) * TS };
-    this.interior = b; this.world = createInterior(b);
+    this.interior = b; this.world = isPlayerHome(b) ? createHomeInterior(this.settlement.home) : createInterior(b);
     this.p.x = ROOM.spawnX; this.p.y = ROOM.spawnY;
     this.clearTransition(); this.discoveries.add(b.id);
     this.biomeBanner = { name: b.name, t: 3 };
@@ -670,6 +672,11 @@ export class Game {
     const p = this.p, near = (x:number,y:number,r=28) => Math.hypot(p.x-x*TS-8,p.y-y*TS-8)<r;
     if (this.interior) {
       if(near(ROOM.exitX,ROOM.exitY,32)){ this.leaveInterior(); return true; }
+      if(isPlayerHome(this.interior)){
+        const bed=this.settlement.home.furniture.find(f=>f.kind==='bed'&&Math.hypot(p.x-(f.x+1)*TS,p.y-(f.y+1.5)*TS)<40);
+        if(bed){p.hp=this.maxHp();p.mp=this.maxMp();this.audio.sfx('heal');this.toast('Você dormiu em casa. HP e MP restaurados.');return true;}
+        return false;
+      }
       if(near(110,106,30)){this.claimChest(`house-${this.interior.id}`,75,this.interior.secret?'elixir':'ether',2,'Tesouro de '+this.interior.name);return true;}
       if(near(114,100,42)){ this.toast(this.interior.note); return true; }
       if(near(127,105,35) && this.interior.kind === 'inn') {p.hp=this.maxHp();p.mp=this.maxMp();this.audio.sfx('heal');this.toast('Você descansou. HP e MP restaurados.');return true;}
@@ -1008,7 +1015,11 @@ export class Game {
       c.drawImage(this.tiles[ground][v], tx * TS, ty * TS);
     }
     drawGroundDetails(c,this.world,x0,y0,x1,y1,wt);
-    if(this.interior) {
+    if(isPlayerHome(this.interior)) {
+      drawHome(c,this.settlement.home,wt);
+      if(this.tool==='furnish'){const d=FURNITURE[this.furniture];c.globalAlpha=.55;drawFurniture(c,{kind:this.furniture,x:this.cursor.x,y:this.cursor.y},wt);c.globalAlpha=1;c.strokeStyle='#f6d18b';c.strokeRect(this.cursor.x*TS+.5,this.cursor.y*TS+.5,d.w*TS-1,d.h*TS-1);}
+      if(this.tool==='unfurnish'){c.strokeStyle='#ed9691';c.strokeRect(this.cursor.x*TS+.5,this.cursor.y*TS+.5,TS-1,TS-1);}
+    } else if(this.interior) {
       drawInterior(c,this.interior,wt);
       drawTreasure(c,110*TS+8,106*TS+12,this.openedChests.has(`house-${this.interior.id}`),wt);
     } else {
@@ -1246,7 +1257,7 @@ export class Game {
       const raw = localStorage.getItem("mana-quest-save"); if (!raw) return;
       const d = JSON.parse(raw);
       Object.assign(this.p, d.p);
-      this.settlement = d.settlement ?? freshSettlement(); this.terrainEdits = d.terrainEdits ?? {};
+      this.settlement = { ...freshSettlement(), ...(d.settlement ?? {}) }; this.settlement.home ??= freshHome(); this.terrainEdits = d.terrainEdits ?? {};
       for (const [key,value] of Object.entries(this.terrainEdits)) {const [x,y]=key.split(',').map(Number); if(x>=0&&y>=0&&x<W&&y<H)this.overworld.tiles[y*W+x]=value;}
       applyStructures(this); this.buildMinimap();
       this.discoveries = new Set(d.discoveries ?? []); this.openedChests = new Set(d.openedChests ?? []);

@@ -2,14 +2,27 @@ import type { Game } from './engine';
 import { ITEMS, type Recipe } from './data';
 import { TS, W, H, T, SOLID, tileAt, hash } from './world';
 import { BUILDINGS, doorOf, type Building } from './exploration';
+import { freshHome, FURNITURE, HOME_LEVELS, canPlace, canUpgrade, createHomeInterior, pieceAt, type HomeState } from './home';
 
-export type Tool = 'explore' | 'mine' | 'axe' | 'till' | 'seed' | 'water' | 'build';
+export type Tool = 'explore' | 'mine' | 'axe' | 'till' | 'seed' | 'water' | 'build' | 'furnish' | 'unfurnish';
 export type StructureKind = 'home' | 'bench' | 'forge' | 'fence' | 'lamp';
 export type CropKind = 'carrot' | 'wheat' | 'moonflower';
 export interface Plot { x: number; y: number; crop: CropKind | null; growth: number; watered: boolean }
 export interface Structure { x: number; y: number; kind: StructureKind }
-export interface SettlementState { plots: Plot[]; structures: Structure[]; mining: number; harvests: number; carpentry: number }
-export const freshSettlement = (): SettlementState => ({ plots: [], structures: [], mining: 0, harvests: 0, carpentry: 0 });
+export interface SettlementState { plots: Plot[]; structures: Structure[]; mining: number; harvests: number; carpentry: number; home: HomeState }
+export const freshSettlement = (): SettlementState => ({ plots: [], structures: [], mining: 0, harvests: 0, carpentry: 0, home: freshHome() });
+export const isPlayerHome = (b: Building | null) => !!b && b.id.startsWith('player-');
+/** Spend materials to enlarge and improve the player's home. */
+export function upgradeHome(g: Game): boolean {
+  const h = g.settlement.home;
+  if (!canUpgrade(h)) { g.toast('Sua casa já é uma mansão completa!'); return false; }
+  const next = HOME_LEVELS[h.level];
+  if (!Object.entries(next.cost).every(([id, n]) => g.count(id) >= n)) { g.toast('Faltam materiais para a reforma.'); return false; }
+  Object.entries(next.cost).forEach(([id, n]) => g.removeItem(id, n));
+  h.level++;
+  if (isPlayerHome(g.interior)) g.world = createHomeInterior(h);
+  g.toast(`Reforma concluída: ${next.name}!`, '#f6d18b'); g.audio.sfx('level'); g.save(); return true;
+}
 export const CROPS: Record<CropKind, { name: string; seed: string; item: string; seconds: number }> = {
   carrot: { name: 'Cenoura', seed: 'carrot_seed', item: 'carrot', seconds: 40 },
   wheat: { name: 'Trigo', seed: 'wheat_seed', item: 'wheat', seconds: 65 },
@@ -43,6 +56,7 @@ export function applyStructures(g: Game) {
   }
 }
 export function useWorldTool(g: Game, wx: number, wy: number) {
+  if (isPlayerHome(g.interior) && (g.tool === 'furnish' || g.tool === 'unfurnish')) return furnishAt(g, Math.floor(wx / TS), Math.floor(wy / TS));
   if (g.interior || g.p.dead > 0) return false;
   const x = Math.floor(wx / TS), y = Math.floor(wy / TS);
   if (x < 4 || y < 4 || x >= W - 8 || y >= H - 8) return false;
@@ -96,6 +110,23 @@ export function useWorldTool(g: Game, wx: number, wy: number) {
   }
   return false;
 }
+function furnishAt(g: Game, x: number, y: number): boolean {
+  const h = g.settlement.home;
+  if (g.tool === 'unfurnish') {
+    const f = pieceAt(h, x, y); if (!f) { g.toast('Nenhum móvel aqui.'); return false; }
+    h.furniture = h.furniture.filter(p => p !== f);
+    Object.entries(FURNITURE[f.kind].cost).forEach(([id, n]) => g.addItem(id, n));
+  } else {
+    const d = FURNITURE[g.furniture], piece = { kind: g.furniture, x, y };
+    if (h.level < d.minLevel) { g.toast(`Requer a reforma "${HOME_LEVELS[d.minLevel - 1].name}".`); return false; }
+    if (!canPlace(h, piece)) { g.toast('Não cabe aqui.'); return false; }
+    for (let oy = 0; oy < d.h; oy++) for (let ox = 0; ox < d.w; ox++) if (d.solid && Math.hypot((x + ox) * TS + 8 - g.p.x, (y + oy) * TS + 8 - g.p.y) < 12) { g.toast('Saia do caminho primeiro.'); return false; }
+    if (!Object.entries(d.cost).every(([id, n]) => g.count(id) >= n)) { g.toast('Faltam materiais para este móvel.'); return false; }
+    Object.entries(d.cost).forEach(([id, n]) => g.removeItem(id, n));
+    h.furniture.push(piece); g.toast(`${d.name} colocado!`);
+  }
+  g.world = createHomeInterior(h); g.burst(x * TS + 8, y * TS + 8, '#f6d18b', 12, 40); g.audio.sfx('craft'); g.save(); return true;
+}
 export function interactSettlement(g: Game): boolean {
   const near = (x: number, y: number) => Math.hypot(g.p.x - x * TS - 8, g.p.y - y * TS - 8) < 32;
   if (g.interior) return false;
@@ -128,7 +159,7 @@ export function renderSettlement(g: Game, c: CanvasRenderingContext2D) {
     else if (s.kind === 'fence') { box(x + 2, y + 2, 3, 14, '#a9885d'); box(x + 12, y + 2, 3, 14, '#a9885d'); box(x, y + 5, 16, 2, '#dbb87d'); box(x, y + 11, 16, 2, '#dbb87d'); }
     else { box(x + 7, y - 12, 2, 27, '#a79261'); box(x + 3, y - 13, 10, 9, '#659e91'); box(x + 5, y - 11, 6, 5, '#f8e6a8'); }
   }
-  if (g.tool !== 'explore') {
+  if (g.tool !== 'explore' && !g.interior) {
     const x = g.cursor.x, y = g.cursor.y, def = STRUCTURES[g.structure];
     c.strokeStyle = Math.hypot(x * TS + 8 - g.p.x, y * TS + 8 - g.p.y) <= 64 ? '#ccebb7' : '#ed9691'; c.lineWidth = 1;
     c.strokeRect(x * TS + .5, y * TS + .5, (g.tool === 'build' ? def.w : 1) * TS - 1, (g.tool === 'build' ? def.h : 1) * TS - 1);
