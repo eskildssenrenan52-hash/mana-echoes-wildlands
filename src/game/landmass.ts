@@ -20,7 +20,7 @@ export const BIOME_LAYOUT: Record<FrontierBiome, { layout: Layout; wall: number;
   lavender: { layout: 'terraces', wall: MUSHROOM },
   mangrove: { layout: 'cells', wall: DTREE, pool: WATER },
   aurora: { layout: 'rings', wall: PINE },
-  amber: { layout: 'ridges', wall: ROCK, pool: undefined },
+  amber: { layout: 'ridges', wall: ROCK },
   spores: { layout: 'cells', wall: MUSHROOM },
   lotus: { layout: 'rings', wall: TREE, pool: WATER },
   marble: { layout: 'maze', wall: PILLAR },
