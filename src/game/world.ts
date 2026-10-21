@@ -159,6 +159,17 @@ export function generateWorld(): World {
   }
 
   // Village
+  // Greater Potos: a much larger city district with a street grid, plazas and a low stone wall.
+  for (let y = 92; y <= 160; y++) for (let x = 84; x <= 162; x++) {
+    const e = ((x - 122) / 38) ** 2 + ((y - 126) / 34) ** 2;
+    if (e > 1.06) continue;
+    const street = (Math.abs(y - 108) <= 1 || Math.abs(y - 126) <= 1 || Math.abs(y - 140) <= 1 || Math.abs(x - 103) <= 1 || Math.abs(x - 122) <= 1 || Math.abs(x - 140) <= 1);
+    const wallRing = e > 0.96 && !(Math.abs(y - 126) <= 2 || Math.abs(x - 122) <= 2 || Math.abs(y - 108) <= 1 || Math.abs(x - 103) <= 1);
+    set(x, y, wallRing ? T.WALL : street ? T.COBBLE : hash(x, y, 61) > .93 ? T.FLOWER : T.GRASS);
+  }
+  // Fountain plazas and street trees.
+  for (const [px, py] of [[103, 140], [140, 108], [103, 108]] as [number, number][]) { clear(px, py, 3, T.COBBLE); set(px, py, T.WATER); }
+  for (let x = 88; x <= 156; x += 6) for (const y of [111, 137]) if (Math.abs(x - 122) > 3 && Math.abs(x - 103) > 2 && Math.abs(x - 140) > 2 && tiles[y * W + x] === T.GRASS) set(x, y, T.BUSH);
   clear(122, 126, 13, T.GRASS);
   for (let y = 114; y <= 138; y++) for (let x = 108; x <= 136; x++) {
     const dx = x - 122, dy = y - 126;
