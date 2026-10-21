@@ -165,7 +165,8 @@ export function generateWorld(): World {
     if (e > 1.06) continue;
     const street = (Math.abs(y - 108) <= 1 || Math.abs(y - 126) <= 1 || Math.abs(y - 140) <= 1 || Math.abs(x - 103) <= 1 || Math.abs(x - 122) <= 1 || Math.abs(x - 140) <= 1);
     const wallRing = e > 0.96 && !(Math.abs(y - 126) <= 2 || Math.abs(x - 122) <= 2 || Math.abs(y - 108) <= 1 || Math.abs(x - 103) <= 1);
-    set(x, y, wallRing ? T.WALL : street ? T.COBBLE : hash(x, y, 61) > .93 ? T.FLOWER : T.GRASS);
+    const prev = tiles[y * W + x], gate = prev === T.PATH || prev === T.BRIDGE || prev === T.SAND || prev === T.SNOW;
+    set(x, y, wallRing && !gate ? T.WALL : gate && !street ? T.PATH : street ? T.COBBLE : hash(x, y, 61) > .93 ? T.FLOWER : T.GRASS);
   }
   // Fountain plazas and street trees.
   for (const [px, py] of [[103, 140], [140, 108], [103, 108]] as [number, number][]) { clear(px, py, 3, T.COBBLE); set(px, py, T.WATER); }
