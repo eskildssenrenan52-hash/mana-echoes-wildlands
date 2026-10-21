@@ -1,0 +1,9 @@
+{
+  "source": "https://github.com/mitocelestial2008-png/mana-echoes-legacy",
+  "capabilities": [
+    {"capability":"game code, world, combat, quests, interiors, inventory, spirits, audio", "source":"src/game and src/routes/index.tsx", "outcome":"migrate", "status":"verified", "next_action":null, "evidence":"Original modules imported; 8 tests pass, original interiors remain reachable; playable render, movement, crafting and expanded world verified in browser. Full campaign playthrough not performed."},
+    {"capability":"local saved game", "source":"Game.save/load browser storage", "outcome":"preserve", "status":"verified", "next_action":null, "evidence":"Original key preserved. Browser created a plot and home, reloaded, continued and read back both, then harvested."},
+    {"capability":"database, auth identities, roles, providers, uploads, webhooks, schedules, secrets", "source":"Manifest and source inspection", "outcome":"not_detected", "status":"not_applicable", "next_action":null},
+    {"capability":"cutover and verification", "source":"Lovable preview", "outcome":"verify", "status":"verified", "next_action":null, "evidence":"Build OK; browser mining, carpentry, house construction, crop watering/growth/harvest, forging and save/load verified. No runtime errors. No production endpoints to cut over. App not published."}
+  ]
+}
